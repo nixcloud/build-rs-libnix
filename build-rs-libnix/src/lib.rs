@@ -222,6 +222,11 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                 "rustc-link-arg-benches" => {
                     rustc_link_arg_benches.push(format!("-C link-arg='{}'", arg));
                 },
+                // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg
+                // cargo:rustc-link-arg=-pthread (tikv-jemalloc-sys)
+                // for the linked targets of the build script's package, not its dependents: the rustc arguments only
+                // go to the package's own units (rustc ignores link args for an rlib, like cargo does)
+                "rustc-link-arg" => rustc_arguments.push(format!("-C link-arg='{}'", arg)),
 
                 // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-cdylib-link-arg
                 // cargo::rustc-link-arg-cdylib=FLAG
@@ -244,7 +249,6 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                 // failing, to be implemented (without usecase/example yet)
                 "metadata" |                   // https://doc.rust-lang.org/cargo/reference/build-scripts.html#the-links-manifest-key
                 "rustc-flags" |                // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-flags
-                "rustc-link-arg" |             // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg
                 "rustc-link-arg-bin" |         // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-bin
                 "rustc-link-arg-bins" |        // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-bins
                 "rustc-link-arg-tests" |       // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-tests

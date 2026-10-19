@@ -24,6 +24,18 @@ mod tests {
     }
 
     #[test]
+    fn test_rustc_link_arg() {
+        // tikv-jemalloc-sys
+        let content = "cargo:rustc-link-lib=static=jemalloc_pic\ncargo:rustc-link-arg=-pthread\n".to_string();
+        let output = handle_content(content).unwrap();
+        assert_eq!(
+            output.rustc_arguments.join(" ").trim(),
+            "-l 'static=jemalloc_pic' -C link-arg='-pthread'"
+        );
+        assert!(output.rustc_propagated_arguments.is_empty());
+    }
+
+    #[test]
     fn test_output1() {
         let content = fs::read_to_string("test/output1").unwrap();
         let output = handle_content(content).unwrap();

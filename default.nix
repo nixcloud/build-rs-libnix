@@ -2,16 +2,17 @@
 
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "build-rs-libnix-cli";
-  version = "0.1.11";
+  version = "0.1.12";
 
-  src = pkgs.fetchFromGitHub {
-    owner = "nixcloud";
-    repo = "build-rs-libnix";
-    rev = "8b5b8adad644a842429ca8fe060325630789ea5a";
-    sha256 = "sha256-s/2C5G36uCNIoHDz6sNadZLcG3OoKihqWB1UZAq7+qQ=";
+  # this checkout, without build outputs
+  src = lib.cleanSourceWith {
+    src = ./.;
+    filter = path: type:
+      let base = baseNameOf path;
+      in !(base == "target" || base == "result" || lib.hasPrefix "result-" base || base == ".direnv");
   };
 
-  cargoHash = "sha256-gJ35ScjnwgBMux4i4oHOyxcNc3jqolMkGhoJGEA1On4=";
+  cargoLock.lockFile = ./Cargo.lock;
 
   nativeBuildInputs = [];
   buildInputs = [];
@@ -22,7 +23,7 @@ pkgs.rustPlatform.buildRustPackage rec {
 
   meta = with lib; {
     description = "A command-line utility that extracts `--cfg` and `--check-cfg` flags from `cargo:`";
-    license = licenses.mit;
+    license = with licenses; [ mit asl20 ];
     maintainers = with maintainers; [ ];
     platforms = platforms.all;
   };

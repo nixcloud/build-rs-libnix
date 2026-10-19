@@ -16,12 +16,12 @@
               fenix.overlay
             ];
           };
-          build_rs_libnix_0_1_11 = pkgs.callPackage ./default.nix {};
+          build_rs_libnix = pkgs.callPackage ./default.nix {};
         in
         with pkgs;
         rec {
-          # nix build .#build_rs_libnix
-          packages = { inherit build_rs_libnix_0_1_11; };
+          # nix build (.#default, .#build_rs_libnix)
+          packages = { inherit build_rs_libnix; default = build_rs_libnix; };
           devShells.default = mkShell {
             buildInputs = [
               # the toolchain used

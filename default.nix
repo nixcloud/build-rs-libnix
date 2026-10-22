@@ -2,7 +2,7 @@
 
 pkgs.rustPlatform.buildRustPackage rec {
   pname = "build-rs-libnix-cli";
-  version = "0.1.12";
+  version = "0.1.13";
 
   # this checkout, without build outputs
   src = lib.cleanSourceWith {

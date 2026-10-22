@@ -121,7 +121,6 @@ pub fn handle_content(input: String) -> Result<TheResult> {
         }
 
         let line = line.trim(); // Remove any trailing newline or whitespace
-        // cargo::KEY=VALUE since rust 1.77, cargo:KEY=VALUE before it; build scripts emit both
         let re = Regex::new(r"^cargo::?([^=]+)\s*=\s*(.+)$")
             .context("Regex error constructing cargo metadata regex")?;
 

@@ -113,6 +113,7 @@ pub fn handle_content(input: String) -> Result<TheResult> {
     let rustc_link_arg_tests: Vec<String> = vec![];
     let rustc_link_arg_examples: Vec<String> = vec![];
     let mut rustc_link_arg_benches: Vec<String> = vec![];
+    let mut errors: Vec<String> = vec![];
 
     for (line_number, line) in input.lines().enumerate() {
         let trimmed_line = line.trim();
@@ -151,7 +152,9 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                     eprintln!("\x1b[1;33mwarning\x1b[0m: {arg}");
                 },
                 "error" => {
-                    eprintln!("\x1b[1;31error\x1b[0m: {arg}");
+                    // like cargo: print every error, fail after the whole output is read
+                    eprintln!("\x1b[1;31merror\x1b[0m: {arg}");
+                    errors.push(arg.to_string());
                 },
 
                 // cargo:rustc-link-lib=static=sqlite3
@@ -267,6 +270,10 @@ pub fn handle_content(input: String) -> Result<TheResult> {
             eprintln_document_with_error(input.clone(), line_number);
             anyhow::bail!("Unknown command to parse on line {line_number}: '{line}'")
         };
+    }
+
+    if !errors.is_empty() {
+        anyhow::bail!("build.rs reported {} error(s) via 'cargo:error'", errors.len())
     }
 
     let the_result = TheResult {

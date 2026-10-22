@@ -124,4 +124,12 @@ mod tests {
             "-C link-arg='-rdynamic'"
         );
     }
+
+    #[test]
+    fn test_error_fails() {
+        // every error is reported, then the build fails, like cargo does
+        let content = "cargo:error=first\ncargo:rustc-cfg=foo\ncargo:error=second\n".to_string();
+        let err = handle_content(content).unwrap_err();
+        assert_eq!(err.to_string(), "build.rs reported 2 error(s) via 'cargo:error'");
+    }
 }

@@ -29,6 +29,8 @@ The original implementation is in cargo `src/cargo/core/compiler/custom_build.rs
 
 ## 🔧 Supported Features
 
+Both spellings of a directive are accepted: `cargo::KEY=VALUE`, documented since rust 1.77, and the older `cargo:KEY=VALUE`.
+
     cargo:cargo-cfg
     cargo:cargo-check-cfg
     cargo:rustc-env

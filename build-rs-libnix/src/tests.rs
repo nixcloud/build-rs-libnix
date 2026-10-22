@@ -36,6 +36,16 @@ mod tests {
     }
 
     #[test]
+    fn test_rustc_cfg_double_colon() {
+        let content = "cargo::rustc-check-cfg=cfg(blake3_sse2_ffi, values(none()))\ncargo::rustc-cfg=blake3_sse2_ffi\n".to_string();
+        let output = handle_content(content).expect("the cargo:: form parses");
+        assert_eq!(
+            output.rustc_arguments.join(" ").trim(),
+            "--check-cfg 'cfg(blake3_sse2_ffi, values(none()))' --cfg 'blake3_sse2_ffi'"
+        );
+    }
+
+    #[test]
     fn test_output1() {
         let content = fs::read_to_string("test/output1").unwrap();
         let output = handle_content(content).unwrap();
@@ -122,6 +132,21 @@ mod tests {
         assert_eq!(
             output.rustc_link_arg_benches.join(" ").trim(),
             "-C link-arg='-rdynamic'"
+        );
+    }
+
+    #[test]
+    fn test_output8() {
+        // blake3 1.8.7, which emits both directive forms in one build script run
+        let content = fs::read_to_string("test/output8").expect("test/output8 is readable");
+        let output = handle_content(content).expect("blake3's build script output parses");
+        assert_eq!(
+            output.rustc_arguments.join(" ").trim(),
+            "--check-cfg 'cfg(blake3_sse2_ffi, values(none()))' --check-cfg 'cfg(blake3_sse2_rust, values(none()))' --check-cfg 'cfg(blake3_sse41_ffi, values(none()))' --check-cfg 'cfg(blake3_sse41_rust, values(none()))' --check-cfg 'cfg(blake3_avx2_ffi, values(none()))' --check-cfg 'cfg(blake3_avx2_rust, values(none()))' --check-cfg 'cfg(blake3_avx512_ffi, values(none()))' --check-cfg 'cfg(blake3_neon, values(none()))' --check-cfg 'cfg(blake3_wasm32_simd, values(none()))' --cfg 'blake3_sse2_ffi' --cfg 'blake3_sse41_ffi' --cfg 'blake3_avx2_ffi' -l 'static=blake3_sse2_sse41_avx2_assembly' -L \"native=$out\" --cfg 'blake3_avx512_ffi' -l 'static=blake3_avx512_assembly' -L \"native=$out\""
+        );
+        assert_eq!(
+            output.rustc_propagated_arguments.join(" ").trim(),
+            "-L 'native=/nix/store/kinbq0rkxv29wqg6dd88pjqysygb0npr-blake3-1_8_7-script_build_run' -L 'native=/nix/store/kinbq0rkxv29wqg6dd88pjqysygb0npr-blake3-1_8_7-script_build_run'"
         );
     }
 }

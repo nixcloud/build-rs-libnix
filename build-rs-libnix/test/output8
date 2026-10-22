@@ -1,0 +1,31 @@
+cargo::rustc-check-cfg=cfg(blake3_sse2_ffi, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_sse2_rust, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_sse41_ffi, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_sse41_rust, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_avx2_ffi, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_avx2_rust, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_avx512_ffi, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_neon, values(none()))
+cargo::rustc-check-cfg=cfg(blake3_wasm32_simd, values(none()))
+cargo::rerun-if-env-changed=CARGO_FEATURE_PURE
+cargo::rerun-if-env-changed=CARGO_FEATURE_NO_NEON
+CC_x86_64-unknown-linux-gnu = None
+HOST_CC = None
+CC = Some(gcc)
+cargo:rerun-if-env-changed=CC_ENABLE_DEBUG_OUTPUT
+CFLAGS = None
+cargo::rerun-if-env-changed=CARGO_FEATURE_PREFER_INTRINSICS
+cargo::rustc-cfg=blake3_sse2_ffi
+cargo::rustc-cfg=blake3_sse41_ffi
+cargo::rustc-cfg=blake3_avx2_ffi
+AR = Some(ar)
+cargo:rustc-link-lib=static=blake3_sse2_sse41_avx2_assembly
+cargo:rustc-link-search=native=/nix/store/kinbq0rkxv29wqg6dd88pjqysygb0npr-blake3-1_8_7-script_build_run
+cargo::rerun-if-env-changed=CARGO_FEATURE_PURE
+cargo::rustc-cfg=blake3_avx512_ffi
+cargo:rustc-link-lib=static=blake3_avx512_assembly
+cargo:rustc-link-search=native=/nix/store/kinbq0rkxv29wqg6dd88pjqysygb0npr-blake3-1_8_7-script_build_run
+cargo::rerun-if-env-changed=CC
+cargo::rerun-if-changed=c/blake3_sse2_x86-64_unix.S
+cargo::rerun-if-changed=c/blake3_dispatch.c
+cargo::rerun-if-changed=c/blake3.c

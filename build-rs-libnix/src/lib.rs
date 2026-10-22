@@ -121,7 +121,7 @@ pub fn handle_content(input: String) -> Result<TheResult> {
         }
 
         let line = line.trim(); // Remove any trailing newline or whitespace
-        let re = Regex::new(r"^cargo:([^=]+)\s*=\s*(.+)$")
+        let re = Regex::new(r"^cargo::?([^=]+)\s*=\s*(.+)$")
             .context("Regex error constructing cargo metadata regex")?;
 
         if let Some(caps) = re.captures(line) {

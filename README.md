@@ -1,117 +1,141 @@
 # build-rs-libnix
 
-In `cargo` projects often uses `build.rs` files to probe for libraries like `openssl` using `pkg-config`.
+`build-rs-libnix` turns the output of a crate's `build.rs` into files that nix builds can read. It is a helper of
+[cargo (libnix)](https://github.com/nixcloud/cargo), the cargo fork that builds every crate in its own nix derivation.
 
-Often one sees text like:
+A `build.rs` talks to cargo by printing `cargo:` lines:
 
-    cargo:rustc-cfg=libc_const_extern_fn
     cargo:rustc-cfg=freebsd11
     cargo:rustc-check-cfg=cfg(espidf_time32)
-    cargo:rustc-check-cfg=cfg(target_arch,values("mips64r6"))
+    cargo:rustc-link-lib=static=sqlite3
+    cargo:rustc-link-search=native=/nix/store/…-sqlite-3.48.0/lib
     cargo:rustc-env=VAR=VALUE
-    cargo:rustc-env=VAR2=
+    cargo:include=/build/libsqlite3-sys-0.31.0/sqlite3
     cargo:warning=This is a custom build warning from build.rs!
 
-This command-line utility `build-rs-libnix` consumes this output and builds arguments like `--cfg` and `--check-cfg` which are used from the nix code to build the application.
+Normally cargo reads these lines itself
+(`parse_metadata` in [`custom_build.rs`](https://github.com/rust-lang/cargo/blob/master/src/cargo/core/compiler/custom_build.rs))
+and keeps the result in memory for the next `rustc` calls. With cargo (libnix), the build script runs inside a nix
+derivation and the crates that use its result are built in other derivations, so the result has to be stored in the
+derivation's output. `build-rs-libnix` does that:
 
-This is useful when integrating crates like `libc`, which emit configuration flags during their build process. 
+    build-rs-libnix --script-output <file with the build.rs output> --out-dir $out/nix
 
-    https://github.com/nixcloud/cargo-build_script_build-parser
+It writes four files:
 
-<https://doc.rust-lang.org/cargo/reference/build-scripts.html>
+| file | contents | used by |
+|---|---|---|
+| `rustc-arguments` | `--cfg`, `--check-cfg`, `-l`, `-L`, `-C link-arg` | the crate the build script belongs to |
+| `rustc-propagated-arguments` | `-L` from `rustc-link-search` | every crate that depends on it, so the final link finds native libraries |
+| `environment-variables` | `rustc-env` values, and `DEP_<links>_*` for crates with a `links` key | the crate, and the build scripts of the crates that depend on it |
+| `rustc-link-arg-benches` | `-C link-arg` for benchmarks | benchmarks |
 
-Distributed as a [Nix Flake](#flake-usage)
+`warning` lines are printed, so they show up in `nix build -L` and in cargo's output.
 
-The motivation to keep this tool seperate from cargo is that when it changes I don't have to rebuild cargo all the time and building this is really fast!
-However, when the interface stabilizes it could be integated into cargo where it actually belongs - either as a standalone binary or as a part of cargo.
+## Why a separate program?
 
-The original implementation is in cargo `src/cargo/core/compiler/custom_build.rs` at `fn parse_metadata<'a>(`
+cargo (libnix) writes one derivation per cargo unit. Each build-script run calls `build-rs-libnix`, so its store path
+is an input of those derivations: it is part of their hashes, and therefore of the hashes of every crate built after
+them.
 
-## 🔧 Supported Features
+**If the parser were part of cargo**, the cargo binary would be that input. Any change to cargo, even a comment,
+would change the hash of every build-script run and of everything that depends on one. In practice that is almost
+the whole dependency graph: change one line in cargo, run `cargo build`, and every crate builds again. When you work
+on cargo (libnix) itself, you'd have to wait for a full rebuild each time. A binary cache wouldn't help either,
+because every cargo version would produce different hashes.
 
-    cargo:cargo-cfg
-    cargo:cargo-check-cfg
-    cargo:rustc-env
-    cargo:warning
-    cargo:error
-    cargo:rustc-link-search
-    cargo:rustc-link-lib
-    cargo:version_number
-    cargo:include
-    cargo:root
-    cargo:conf
-    cargo:version_number
-    cargo:static
+**As a separate package** with a fixed version (cargo (libnix) pins a commit and hash in `build_rs_libnix.nix`),
+the units' hashes change only when this parser is updated on purpose. You can change cargo as often as you like, and
+the crates already in the nix store, or in a binary cache, are reused.
 
-## 🔧 Experimental Features
+It's also quicker to work on: this crate builds in seconds and its tests run on captured `build.rs` outputs (in
+`build-rs-libnix/test/`). Building cargo (libnix) takes about 440 units.
 
-## 🔧 Intentionally Ignored Features
+**Integrating it into cargo later?** Once the format settles, the code could move into the cargo repository, for
+example as a workspace crate that cargo calls. The rebuild problem stays, though: it has to be built as its own small
+derivation with its own version, not as part of the cargo binary, or every cargo change rebuilds everything again.
 
-    cargo:rerun-if-changed
-    cargo:rerun-if-env-changed
-    cargo:rerun-if-changed-bin
-    cargo:rerun-if-changed-glob
-    cargo:rerun-if-changed-dir
-    cargo:rerun-if-changed-recursive
-    cargo:rerun-if-changed-env
-    cargo:lib_dir
+## Supported directives
 
-## 🔧 Missing Features
+| directive | result |
+|---|---|
+| `rustc-cfg` | `--cfg` |
+| `rustc-check-cfg` | `--check-cfg` |
+| `rustc-link-lib` | `-l` |
+| `rustc-link-search` | `-L` for the crate, propagated to its dependents |
+| `rustc-link-arg` | `-C link-arg`, for the crate's own targets |
+| `rustc-link-arg-benches` | `-C link-arg` for benchmarks |
+| `rustc-env` | an environment variable for the crate |
+| `include`, `root`, `conf`, `version_number`, `static` | `DEP_<links>_<KEY>` for dependents' build scripts (needs `CARGO_MANIFEST_LINKS`) |
+| `warning` | printed |
+| `error` | printed; the build fails once the whole output is read, like with cargo |
 
-    cargo:rustc-flags
-    cargo:rustc-cdylib-link-arg
-    cargo:rustc-bin-link-arg
-    cargo:rustc-link-arg-bin
-    ...
+**Ignored on purpose** (nix rebuilds a unit when its inputs change, so cargo's change tracking isn't needed):
+`rerun-if-changed`, `rerun-if-env-changed`, `rerun-if-changed-bin`, `rerun-if-changed-glob`, `rerun-if-changed-dir`,
+`rerun-if-changed-recursive`, `rerun-if-changed-env`, `lib_dir`.
 
-### Writing these files
+**Not implemented yet**, the build fails with "not implemented yet": `rustc-flags`, `metadata`,
+`rustc-cdylib-link-arg` / `rustc-link-arg-cdylib`, `rustc-link-arg-bin`, `rustc-link-arg-bins`,
+`rustc-link-arg-tests`, `rustc-link-arg-examples`. If you hit one, please open an issue with the crate's name.
 
-    cargo  run  -- --script-output build-rs-libnix/test/output1 --out-dir nix/
+Any other `cargo:KEY=VALUE` line is printed as a warning and ignored.
 
-Output
+## Usage
+
+### From nix
+
+```nix
+# flake
+inputs.build-rs-libnix.url = "github:nixcloud/build-rs-libnix";
+# … inputs.build-rs-libnix.packages.${system}.default
+
+# without flakes, from a checkout
+build_rs_libnix = pkgs.callPackage ./default.nix { };
+```
+
+`nix build github:nixcloud/build-rs-libnix` builds it, and the binary is `result/bin/build-rs-libnix`.
+
+### By hand
+
+    cargo run -- --script-output build-rs-libnix/test/output1 --out-dir nix/
+
+prints
 
     warning: This is a custom build warning from build.rs!
     build.rs related nix files written to 'nix/'
 
-# Hacking
+## Hacking
 
-When traditional cargo executes build.rs scripts it stores the output of each in this folder structure:
+### Getting real build.rs outputs
 
-    du -a target/ | grep output | grep -v '.finger'
-    4       target/debug/build/openssl-sys-bf6c2c38618f44c9/root-output
-    8       target/debug/build/openssl-sys-bf6c2c38618f44c9/output
-    4       target/debug/build/parking_lot_core-7bae69a33df63e20/root-output
-    4       target/debug/build/parking_lot_core-7bae69a33df63e20/output
-    4       target/debug/build/generic-array-39173d8ec8bd3f99/root-output
-    4       target/debug/build/generic-array-39173d8ec8bd3f99/output
-    4       target/debug/build/im-rc-723454c6ae50b5e6/root-output
-    4       target/debug/build/im-rc-723454c6ae50b5e6/output
-    4       target/debug/build/pulldown-cmark-1b80d253c6640a7e/root-output
-    ...
+The upstream cargo keeps the output of every build script it runs:
 
-So look at the *./output files and filter them with:
+    find target -path '*/build/*/output'
+    target/debug/build/openssl-sys-bf6c2c38618f44c9/output
+    target/debug/build/parking_lot_core-7bae69a33df63e20/output
+    …
 
-    cat target/debug/build/openssl-sys-bf6c2c38618f44c9/output | grep '^cargo:'
+    grep '^cargo:' target/debug/build/openssl-sys-bf6c2c38618f44c9/output
 
-# 🚀 Installation
+Copy an interesting one to `build-rs-libnix/test/` and add a test for it.
 
-This project is distributed as a Nix Flake.
-
-```nix
-build_rs_libnix_0_1_11 = pkgs.callPackage ./default.nix {};
-```
-
-# 🧪 Testing
-
-To verify functionality, run:
+### Tests
 
     cargo test
 
-The tests are written directly in main.rs.
+The tests are in `build-rs-libnix/src/tests.rs`.
 
-# 📄 License
+### Releasing a new version
 
-Cargo is primarily distributed under the terms of both the MIT license
-and the Apache License (Version 2.0). So is this project.
+1. bump `version` in `Cargo.toml` and `default.nix`
+2. update the pinned `rev`, `sha256` and `cargoHash` in cargo (libnix)'s
+   `src/compiler/nix_build/templates/build_rs_libnix.nix.handlebars`
+
+Every unit with a build script, and everything that depends on one, is rebuilt once after that. That's the reason
+to update it on purpose, not on every change.
+
+## License
+
+Like cargo, this project is distributed under the terms of both the MIT license and the Apache License (Version 2.0).
 
 See [LICENSE-APACHE](LICENSE-APACHE) and [LICENSE-MIT](LICENSE-MIT) for details.

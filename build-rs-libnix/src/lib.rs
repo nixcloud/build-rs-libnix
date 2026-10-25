@@ -122,12 +122,26 @@ pub fn handle_content(input: String) -> Result<TheResult> {
         }
 
         let line = line.trim(); // Remove any trailing newline or whitespace
-        let re = Regex::new(r"^cargo:([^=]+)\s*=\s*(.+)$")
+        // `cargo::` (Rust 1.77+) names the same instructions as `cargo:`, except for the metadata of a `links`
+        // package: `cargo::metadata=KEY=VALUE` is `cargo:KEY=VALUE`
+        let (instruction, new_syntax) = match line.strip_prefix("cargo::") {
+            Some(rest) => (rest, true),
+            None => (&line["cargo:".len()..], false),
+        };
+        let re = Regex::new(r"^([^=]+)\s*=\s*(.+)$")
             .context("Regex error constructing cargo metadata regex")?;
 
-        if let Some(caps) = re.captures(line) {
-            let command = &caps[1];
-            let arg = &caps[2];
+        if let Some(caps) = re.captures(instruction) {
+            let (mut command, mut arg) = (caps.get(1).unwrap().as_str(), caps.get(2).unwrap().as_str());
+            if new_syntax && command == "metadata" {
+                match arg.split_once('=') {
+                    Some((key, value)) if !value.is_empty() => (command, arg) = (key, value),
+                    _ => {
+                        eprintln_document_with_error(input.clone(), line_number);
+                        anyhow::bail!("Unable to parse metadata argument at {line_number}: '{line}'")
+                    }
+                }
+            }
 
             match command {
                 // rustc

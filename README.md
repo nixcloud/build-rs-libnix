@@ -3,7 +3,7 @@
 `build-rs-libnix` turns the output of a crate's `build.rs` into files that nix builds can read. It is a helper of
 [cargo (libnix)](https://github.com/nixcloud/cargo), the cargo fork that builds every crate in its own nix derivation.
 
-A `build.rs` talks to cargo by printing `cargo:` lines:
+A `build.rs` talks to cargo by printing `cargo:` lines (or `cargo::` lines, the syntax since Rust 1.77):
 
     cargo:rustc-cfg=freebsd11
     cargo:rustc-check-cfg=cfg(espidf_time32)
@@ -12,6 +12,9 @@ A `build.rs` talks to cargo by printing `cargo:` lines:
     cargo:rustc-env=VAR=VALUE
     cargo:include=/build/libsqlite3-sys-0.31.0/sqlite3
     cargo:warning=This is a custom build warning from build.rs!
+
+Both prefixes name the same directives. The one difference is the metadata of a `links` package: `cargo:KEY=VALUE`
+in the old syntax, `cargo::metadata=KEY=VALUE` in the new one; both become the same `DEP_<links>_<KEY>`.
 
 Normally cargo reads these lines itself
 (`parse_metadata` in [`custom_build.rs`](https://github.com/rust-lang/cargo/blob/master/src/cargo/core/compiler/custom_build.rs))
@@ -66,7 +69,7 @@ derivation with its own version, not as part of the cargo binary, or every cargo
 | `rustc-link-arg` | `-C link-arg`, for the crate's own targets |
 | `rustc-link-arg-benches` | `-C link-arg` for benchmarks |
 | `rustc-env` | an environment variable for the crate |
-| `include`, `root`, `conf`, `version_number`, `static` | `DEP_<links>_<KEY>` for dependents' build scripts (needs `CARGO_MANIFEST_LINKS`) |
+| `include`, `root`, `conf`, `version_number`, `static` (also as `cargo::metadata=KEY=VALUE`) | `DEP_<links>_<KEY>` for dependents' build scripts (needs `CARGO_MANIFEST_LINKS`) |
 | `warning` | printed |
 | `error` | printed; the build fails once the whole output is read, like with cargo |
 
@@ -74,11 +77,12 @@ derivation with its own version, not as part of the cargo binary, or every cargo
 `rerun-if-changed`, `rerun-if-env-changed`, `rerun-if-changed-bin`, `rerun-if-changed-glob`, `rerun-if-changed-dir`,
 `rerun-if-changed-recursive`, `rerun-if-changed-env`, `lib_dir`.
 
-**Not implemented yet**, the build fails with "not implemented yet": `rustc-flags`, `metadata`,
+**Not implemented yet**, the build fails with "not implemented yet": `rustc-flags`, `cargo:metadata` (old syntax),
 `rustc-cdylib-link-arg` / `rustc-link-arg-cdylib`, `rustc-link-arg-bin`, `rustc-link-arg-bins`,
 `rustc-link-arg-tests`, `rustc-link-arg-examples`. If you hit one, please open an issue with the crate's name.
 
-Any other `cargo:KEY=VALUE` line is printed as a warning and ignored.
+Any other `cargo:KEY=VALUE` line (or `cargo::metadata=KEY=VALUE` with another key) is printed as a warning and
+ignored.
 
 ## Usage
 

@@ -126,6 +126,50 @@ mod tests {
     }
 
     #[test]
+    fn test_output8() {
+        // blake3 1.8.7: `cargo::` instructions (Rust 1.77+) mixed with the `cargo:` ones of the cc crate
+        let content = fs::read_to_string("test/output8").unwrap();
+        let output = handle_content(content).unwrap();
+        let check_cfgs: Vec<String> = [
+            "sse2_ffi", "sse2_rust", "sse41_ffi", "sse41_rust", "avx2_ffi", "avx2_rust", "avx512_ffi", "neon",
+            "wasm32_simd",
+        ]
+        .iter()
+        .map(|c| format!("--check-cfg 'cfg(blake3_{c}, values(none()))'"))
+        .collect();
+        assert_eq!(
+            output.rustc_arguments.join(" ").trim(),
+            format!(
+                "{} --cfg 'blake3_sse2_ffi' --cfg 'blake3_sse41_ffi' --cfg 'blake3_avx2_ffi' \
+                 -l 'static=blake3_sse2_sse41_avx2_assembly' -L \"native=$out\" --cfg 'blake3_avx512_ffi' \
+                 -l 'static=blake3_avx512_assembly' -L \"native=$out\"",
+                check_cfgs.join(" ")
+            )
+        );
+    }
+
+    #[test]
+    fn test_new_syntax() {
+        unsafe {
+            env::set_var("CARGO_MANIFEST_LINKS", "MYCRATE");
+        }
+        let content = "cargo::rustc-cfg=foo\ncargo:rustc-cfg=bar\ncargo::rustc-env=A=b\n\
+                       cargo::rustc-link-lib=z\ncargo::rerun-if-changed=build.rs\n\
+                       cargo::metadata=include=/inc\ncargo:root=/root\n"
+            .to_string();
+        let output = handle_content(content).unwrap();
+        assert_eq!(output.rustc_arguments.join(" ").trim(), "--cfg 'foo' --cfg 'bar' -l 'z'");
+        assert_eq!(
+            output.environment_variables.join("\n").trim(),
+            "A='b'\nDEP_MYCRATE_INCLUDE='/inc'\nDEP_MYCRATE_ROOT='/root'"
+        );
+        let err = handle_content("cargo::metadata=novalue\n".to_string()).unwrap_err();
+        assert!(err.to_string().contains("Unable to parse metadata argument"));
+        let err = handle_content("cargo::error=new syntax\n".to_string()).unwrap_err();
+        assert_eq!(err.to_string(), "build.rs reported 1 error(s) via 'cargo:error'");
+    }
+
+    #[test]
     fn test_error_fails() {
         // every error is reported, then the build fails, like cargo does
         let content = "cargo:error=first\ncargo:rustc-cfg=foo\ncargo:error=second\n".to_string();

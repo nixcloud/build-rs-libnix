@@ -75,7 +75,7 @@ checksum = "843867be96c8daad0d758b57df9392b6d8d271134fce549de6ce169ff98a92af"
 
 [[package]]
 name = "build-rs-libnix"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "colored",
@@ -131,7 +131,7 @@ checksum = "3a822ea5bc7590f9d40f1ba12c0dc3c2760f3482c6984db1573ad11031420831"
 
 [[package]]
 name = "cli"
-version = "0.1.13"
+version = "0.1.14"
 dependencies = [
  "anyhow",
  "build-rs-libnix",

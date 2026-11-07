@@ -1,6 +1,6 @@
 #[cfg(test)]
 mod tests {
-    use crate::handle_content;
+    use crate::{handle_content, link_search_directory};
     use std::env;
     use std::fs;
     use std::io::Write;
@@ -21,6 +21,50 @@ mod tests {
             output.rustc_arguments.join(" ").trim(),
             "--cfg 'freebsd11' --cfg 'libc_const_extern_fn'"
         );
+    }
+
+    #[test]
+    fn test_rustc_link_search_kinds() {
+        // no kind, as cortex-m-rt prints it: `all`, like cargo; each kind; a `=` in the path of a value without a kind
+        let content = "cargo:rustc-link-search=/nix/store/x-cortex-m-rt\n\
+            cargo:rustc-link-search=native=/nix/store/y\n\
+            cargo:rustc-link-search=dependency=/nix/store/y\n\
+            cargo:rustc-link-search=crate=/nix/store/y\n\
+            cargo:rustc-link-search=framework=/nix/store/y\n\
+            cargo:rustc-link-search=all=/nix/store/y\n\
+            cargo:rustc-link-search=/nix/store/a=b\n"
+            .to_string();
+        let output = handle_content(content).unwrap();
+        assert_eq!(
+            output.rustc_arguments,
+            [
+                "-L \"all=/nix/store/x-cortex-m-rt\"",
+                "-L \"native=/nix/store/y\"",
+                "-L \"dependency=/nix/store/y\"",
+                "-L \"crate=/nix/store/y\"",
+                "-L \"framework=/nix/store/y\"",
+                "-L \"all=/nix/store/y\"",
+                "-L \"all=/nix/store/a=b\"",
+            ]
+        );
+        assert_eq!(
+            output.rustc_propagated_arguments[0..2],
+            ["-L '/nix/store/x-cortex-m-rt'", "-L 'native=/nix/store/y'"]
+        );
+    }
+
+    #[test]
+    fn test_link_search_directory() {
+        let out = Some("/nix/store/h-run");
+        assert_eq!(link_search_directory("/nix/store/h-run", out), "$out");
+        assert_eq!(link_search_directory("/nix/store/h-run/", out), "$out");
+        assert_eq!(link_search_directory("/nix/store/h-run/install/lib", out), "$out/install/lib");
+        // only whole path components: another store path
+        assert_eq!(link_search_directory("/nix/store/h-run-2/lib", out), "/nix/store/h-run-2/lib");
+        assert_eq!(link_search_directory("/nix/store/h-sqlite/lib", out), "/nix/store/h-sqlite/lib");
+        assert_eq!(link_search_directory("/build/tmp.X3Lovygu3U", out), "$out");
+        assert_eq!(link_search_directory("relative/dir", out), "$out");
+        assert_eq!(link_search_directory("/build/tmp.X3Lovygu3U", None), "$out");
     }
 
     #[test]
@@ -85,7 +129,7 @@ mod tests {
         let output = handle_content(content).unwrap();
         assert_eq!(
             output.rustc_arguments.join(" ").trim(),
-            "--check-cfg 'cfg(openssl)' --check-cfg 'cfg(libressl)' --check-cfg 'cfg(boringssl)' --check-cfg 'cfg(libressl250)' --check-cfg 'cfg(libressl251)' --check-cfg 'cfg(libressl252)' --check-cfg 'cfg(libressl261)' --check-cfg 'cfg(libressl270)' --check-cfg 'cfg(libressl271)' --check-cfg 'cfg(libressl273)' --check-cfg 'cfg(libressl280)' --check-cfg 'cfg(libressl281)' --check-cfg 'cfg(libressl291)' --check-cfg 'cfg(libressl310)' --check-cfg 'cfg(libressl321)' --check-cfg 'cfg(libressl332)' --check-cfg 'cfg(libressl340)' --check-cfg 'cfg(libressl350)' --check-cfg 'cfg(libressl360)' --check-cfg 'cfg(libressl361)' --check-cfg 'cfg(libressl370)' --check-cfg 'cfg(libressl380)' --check-cfg 'cfg(libressl381)' --check-cfg 'cfg(libressl382)' --check-cfg 'cfg(libressl390)' --check-cfg 'cfg(libressl400)' --check-cfg 'cfg(libressl410)' --check-cfg 'cfg(ossl101)' --check-cfg 'cfg(ossl102)' --check-cfg 'cfg(ossl102f)' --check-cfg 'cfg(ossl102h)' --check-cfg 'cfg(ossl110)' --check-cfg 'cfg(ossl110f)' --check-cfg 'cfg(ossl110g)' --check-cfg 'cfg(ossl110h)' --check-cfg 'cfg(ossl111)' --check-cfg 'cfg(ossl111b)' --check-cfg 'cfg(ossl111c)' --check-cfg 'cfg(ossl111d)' --check-cfg 'cfg(ossl300)' --check-cfg 'cfg(ossl310)' --check-cfg 'cfg(ossl320)' --check-cfg 'cfg(ossl330)' --check-cfg 'cfg(ossl340)' -L \"native=$out\" -l 'ssl' -l 'crypto' --cfg 'osslconf=\"OPENSSL_NO_SSL3_METHOD\"' --cfg 'openssl' --cfg 'ossl340' --cfg 'ossl330' --cfg 'ossl320' --cfg 'ossl300' --cfg 'ossl101' --cfg 'ossl102' --cfg 'ossl102f' --cfg 'ossl102h' --cfg 'ossl110' --cfg 'ossl110f' --cfg 'ossl110g' --cfg 'ossl110h' --cfg 'ossl111' --cfg 'ossl111b' --cfg 'ossl111c' --cfg 'ossl111d'"
+            "--check-cfg 'cfg(openssl)' --check-cfg 'cfg(libressl)' --check-cfg 'cfg(boringssl)' --check-cfg 'cfg(libressl250)' --check-cfg 'cfg(libressl251)' --check-cfg 'cfg(libressl252)' --check-cfg 'cfg(libressl261)' --check-cfg 'cfg(libressl270)' --check-cfg 'cfg(libressl271)' --check-cfg 'cfg(libressl273)' --check-cfg 'cfg(libressl280)' --check-cfg 'cfg(libressl281)' --check-cfg 'cfg(libressl291)' --check-cfg 'cfg(libressl310)' --check-cfg 'cfg(libressl321)' --check-cfg 'cfg(libressl332)' --check-cfg 'cfg(libressl340)' --check-cfg 'cfg(libressl350)' --check-cfg 'cfg(libressl360)' --check-cfg 'cfg(libressl361)' --check-cfg 'cfg(libressl370)' --check-cfg 'cfg(libressl380)' --check-cfg 'cfg(libressl381)' --check-cfg 'cfg(libressl382)' --check-cfg 'cfg(libressl390)' --check-cfg 'cfg(libressl400)' --check-cfg 'cfg(libressl410)' --check-cfg 'cfg(ossl101)' --check-cfg 'cfg(ossl102)' --check-cfg 'cfg(ossl102f)' --check-cfg 'cfg(ossl102h)' --check-cfg 'cfg(ossl110)' --check-cfg 'cfg(ossl110f)' --check-cfg 'cfg(ossl110g)' --check-cfg 'cfg(ossl110h)' --check-cfg 'cfg(ossl111)' --check-cfg 'cfg(ossl111b)' --check-cfg 'cfg(ossl111c)' --check-cfg 'cfg(ossl111d)' --check-cfg 'cfg(ossl300)' --check-cfg 'cfg(ossl310)' --check-cfg 'cfg(ossl320)' --check-cfg 'cfg(ossl330)' --check-cfg 'cfg(ossl340)' -L \"native=/nix/store/byx7ahs386pskh8d5sdkrkpscfz9yyjp-openssl-3.4.1/lib\" -l 'ssl' -l 'crypto' --cfg 'osslconf=\"OPENSSL_NO_SSL3_METHOD\"' --cfg 'openssl' --cfg 'ossl340' --cfg 'ossl330' --cfg 'ossl320' --cfg 'ossl300' --cfg 'ossl101' --cfg 'ossl102' --cfg 'ossl102f' --cfg 'ossl102h' --cfg 'ossl110' --cfg 'ossl110f' --cfg 'ossl110g' --cfg 'ossl110h' --cfg 'ossl111' --cfg 'ossl111b' --cfg 'ossl111c' --cfg 'ossl111d'"
         );
         assert_eq!(
             output.rustc_propagated_arguments.join(" ").trim(),
@@ -112,7 +156,7 @@ mod tests {
         let output = handle_content(content).unwrap();
         assert_eq!(
             output.rustc_arguments.join(" ").trim(),
-            "-L \"native=$out\" -l 'sqlite3'"
+            "-L \"native=/nix/store/yfjzkkkyxcalyj7l1n4d4y6s81i65hmy-sqlite-3.48.0/lib\" -l 'sqlite3'"
         );
         assert_eq!(
             output.rustc_propagated_arguments.join(" ").trim(),
@@ -141,8 +185,8 @@ mod tests {
             output.rustc_arguments.join(" ").trim(),
             format!(
                 "{} --cfg 'blake3_sse2_ffi' --cfg 'blake3_sse41_ffi' --cfg 'blake3_avx2_ffi' \
-                 -l 'static=blake3_sse2_sse41_avx2_assembly' -L \"native=$out\" --cfg 'blake3_avx512_ffi' \
-                 -l 'static=blake3_avx512_assembly' -L \"native=$out\"",
+                 -l 'static=blake3_sse2_sse41_avx2_assembly' -L \"native=/nix/store/x3bz4fjz2xqkmq2k6z00pnzd2fci606c-blake3-1_8_7-script_build_run-b094bfd45a5d122f\" --cfg 'blake3_avx512_ffi' \
+                 -l 'static=blake3_avx512_assembly' -L \"native=/nix/store/x3bz4fjz2xqkmq2k6z00pnzd2fci606c-blake3-1_8_7-script_build_run-b094bfd45a5d122f\"",
                 check_cfgs.join(" ")
             )
         );

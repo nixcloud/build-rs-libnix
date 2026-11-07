@@ -101,6 +101,18 @@ fn eprintln_document_with_warning(input: String, error_line: usize) {
     }
 }
 
+/// The directory of a `rustc-link-search` for the crate's own units. Their `$out` has a copy of the build script's
+/// OUT_DIR, so a directory below it (cmake: OUT_DIR/lib) stays below `$out`; a directory in the store is used as it is.
+/// Everything else is gone after the build script run.
+fn link_search_directory(path: &str, out_dir: Option<&str>) -> String {
+    match out_dir.and_then(|dir| Path::new(path).strip_prefix(dir).ok()) {
+        Some(relative) if relative.as_os_str().is_empty() => "$out".to_string(),
+        Some(relative) => format!("$out/{}", relative.display()),
+        None if path.starts_with("/nix/store/") => path.to_string(),
+        None => "$out".to_string(),
+    }
+}
+
 pub fn handle_content(input: String) -> Result<TheResult> {
     let mut rustc_arguments: Vec<String> = vec![];
     let mut rustc_propagated_arguments: Vec<String> = vec![];
@@ -177,20 +189,13 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                 // libsqlite3-sys> cargo:rustc-link-search=native=/nix/store/yfjzkkkyxcalyj7l1n4d4y6s81i65hmy-sqlite-3.48.0/lib
                 "rustc-link-search" => {
                     rustc_propagated_arguments.push(format!("-L '{}'", arg));
-                    let re = Regex::new(r"^(.+)\s*=\s*(.+)$")
-                        .context("Regex error constructing cargo metadata regex")?;
-                    if let Some(caps) = re.captures(&arg) {
-                        let mode = &caps[1];
-                        let _directory = &caps[2];
-                        // if directory.starts_with("/nix/store") {
-                            // rustc_arguments.push(format!("-L \"{}={}\"", mode, directory));
-                        // } else {
-                            rustc_arguments.push(format!("-L \"{}=$out\"", mode));
-                        // }
-                    } else {
-                        eprintln_document_with_error(input.clone(), line_number);
-                        anyhow::bail!("Unable to parse rustc-link-search argument at {line_number}: '{line}'")
-                    }
+                    // [KIND=]PATH like cargo: anything but these five kinds is part of the path, the kind is `all` then
+                    let (mode, path) = match arg.split_once('=') {
+                        Some((kind @ ("dependency" | "crate" | "native" | "framework" | "all"), path)) => (kind, path),
+                        _ => ("all", arg),
+                    };
+                    let directory = link_search_directory(path, std::env::var("OUT_DIR").ok().as_deref());
+                    rustc_arguments.push(format!("-L \"{}={}\"", mode, directory));
                 },
                 // https://rurust.github.io/cargo-docs-ru/build-script.html#the-links-manifest-key
                 // cargo:include=/build/libsqlite3-sys-0.31.0/sqlite3

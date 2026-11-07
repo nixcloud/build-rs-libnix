@@ -65,7 +65,7 @@ derivation with its own version, not as part of the cargo binary, or every cargo
 | `rustc-cfg` | `--cfg` |
 | `rustc-check-cfg` | `--check-cfg` |
 | `rustc-link-lib` | `-l` |
-| `rustc-link-search` | `-L` for the crate, propagated to its dependents |
+| `rustc-link-search` | `-L` for the crate, propagated to its dependents. `[KIND=]PATH` as in cargo: no kind means `all` |
 | `rustc-link-arg` | `-C link-arg`, for the crate's own targets |
 | `rustc-link-arg-benches` | `-C link-arg` for benchmarks |
 | `rustc-env` | an environment variable for the crate |

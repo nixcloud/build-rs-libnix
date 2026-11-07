@@ -68,6 +68,16 @@ mod tests {
     }
 
     #[test]
+    fn test_rustc_link_arg_bins() {
+        // only for the bin targets: neither in the rustc arguments of the package nor propagated
+        let content = "cargo:rustc-link-arg-bins=--nmagic\ncargo:rustc-link-arg-bins=-Tlink.x\n".to_string();
+        let output = handle_content(content).unwrap();
+        assert_eq!(output.rustc_link_arg_bins.join(" "), "-C link-arg='--nmagic' -C link-arg='-Tlink.x'");
+        assert!(output.rustc_arguments.is_empty());
+        assert!(output.rustc_propagated_arguments.is_empty());
+    }
+
+    #[test]
     fn test_rustc_link_arg() {
         // tikv-jemalloc-sys
         let content = "cargo:rustc-link-lib=static=jemalloc_pic\ncargo:rustc-link-arg=-pthread\n".to_string();

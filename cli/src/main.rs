@@ -1,8 +1,7 @@
 use anyhow::Result;
-use build_rs_libnix::handle_content;
+use build_rs_libnix::process_buildrs_output;
 use clap::Parser;
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
 
 #[derive(clap::Parser, Debug)]
 #[clap(
@@ -22,43 +21,5 @@ pub struct BuildRsNixArgs {
 
 fn main() -> Result<()> {
     let args = BuildRsNixArgs::parse();
-    let input = fs::read_to_string(Path::new(&args.script_output)).expect("Could not read file");
-    match handle_content(input) {
-        Ok(out) => {
-            let out_dir = args.out_dir;
-
-            let rustc_arguments_path = Path::new(&out_dir).join("rustc-arguments");
-            std::fs::write(rustc_arguments_path, out.rustc_arguments.join(" "))
-                .expect("Unable to write data to file");
-
-            let rustc_propagated_arguments_path =
-                Path::new(&out_dir).join("rustc-propagated-arguments");
-            std::fs::write(
-                rustc_propagated_arguments_path,
-                out.rustc_propagated_arguments.join(" "),
-            )
-            .expect("Unable to write data to file");
-
-            let environment_variables_path = Path::new(&out_dir).join("environment-variables");
-            std::fs::write(
-                environment_variables_path,
-                out.environment_variables.join("\n"),
-            )
-            .expect("Unable to write data to file");
-
-            let rustc_link_arg_benches_path = Path::new(&out_dir).join("rustc-link-arg-benches");
-            std::fs::write(
-                rustc_link_arg_benches_path,
-                out.rustc_link_arg_benches.join(" "),
-            )
-            .expect("Unable to write data to file");
-
-            println!(
-                "build.rs related nix files written to '{}'",
-                out_dir.display()
-            );
-        }
-        Err(e) => return Err(e),
-    }
-    Ok(())
+    process_buildrs_output(&args.script_output, &args.out_dir)
 }

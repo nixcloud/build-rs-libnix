@@ -58,6 +58,10 @@ pub fn process_buildrs_output(in_path: &Path, out_dir: &Path) -> Result<()> {
             )
             .expect("Unable to write data to file");
 
+            let rustc_link_arg_bins_path = Path::new(&out_dir).join("rustc-link-arg-bins");
+            std::fs::write(rustc_link_arg_bins_path, out.rustc_link_arg_bins.join(" "))
+                .expect("Unable to write data to file");
+
             let rustc_link_arg_benches_path = Path::new(&out_dir).join("rustc-link-arg-benches");
             std::fs::write(
                 rustc_link_arg_benches_path,
@@ -121,7 +125,7 @@ pub fn handle_content(input: String) -> Result<TheResult> {
     let rustc_flags: Vec<String> = vec![];
     let rustc_link_arg_cdylib: Vec<String> = vec![];
     let rustc_link_arg_bin: Vec<String> = vec![];
-    let rustc_link_arg_bins: Vec<String> = vec![];
+    let mut rustc_link_arg_bins: Vec<String> = vec![];
     let rustc_link_arg_tests: Vec<String> = vec![];
     let rustc_link_arg_examples: Vec<String> = vec![];
     let mut rustc_link_arg_benches: Vec<String> = vec![];
@@ -249,6 +253,10 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                 // for the linked targets of the build script's package, not its dependents: the rustc arguments only
                 // go to the package's own units (rustc ignores link args for an rlib, like cargo does)
                 "rustc-link-arg" => rustc_arguments.push(format!("-C link-arg='{}'", arg)),
+                // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-bins
+                // cargo:rustc-link-arg-bins=-Tlink.x (embedded projects)
+                // only for the bin targets of the build script's package: cargo reads this file for those units
+                "rustc-link-arg-bins" => rustc_link_arg_bins.push(format!("-C link-arg='{}'", arg)),
 
                 // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-cdylib-link-arg
                 // cargo::rustc-link-arg-cdylib=FLAG
@@ -272,7 +280,6 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                 "metadata" |                   // https://doc.rust-lang.org/cargo/reference/build-scripts.html#the-links-manifest-key
                 "rustc-flags" |                // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-flags
                 "rustc-link-arg-bin" |         // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-bin
-                "rustc-link-arg-bins" |        // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-bins
                 "rustc-link-arg-tests" |       // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-tests
                 "rustc-link-arg-examples"      // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-examples
                 => {

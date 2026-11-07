@@ -31,6 +31,7 @@ It writes four files:
 | `rustc-arguments` | `--cfg`, `--check-cfg`, `-l`, `-L`, `-C link-arg` | the crate the build script belongs to |
 | `rustc-propagated-arguments` | `-L` from `rustc-link-search` | every crate that depends on it, so the final link finds native libraries |
 | `environment-variables` | `rustc-env` values, and `DEP_<links>_*` for crates with a `links` key | the crate, and the build scripts of the crates that depend on it |
+| `rustc-link-arg-bins` | `-C link-arg` for binaries | the bin targets of the crate |
 | `rustc-link-arg-benches` | `-C link-arg` for benchmarks | benchmarks |
 
 `warning` lines are printed, so they show up in `nix build -L` and in cargo's output.
@@ -67,6 +68,7 @@ derivation with its own version, not as part of the cargo binary, or every cargo
 | `rustc-link-lib` | `-l` |
 | `rustc-link-search` | `-L` for the crate, propagated to its dependents. `[KIND=]PATH` as in cargo: no kind means `all` |
 | `rustc-link-arg` | `-C link-arg`, for the crate's own targets |
+| `rustc-link-arg-bins` | `-C link-arg`, for the crate's bin targets |
 | `rustc-link-arg-benches` | `-C link-arg` for benchmarks |
 | `rustc-env` | an environment variable for the crate |
 | `include`, `root`, `conf`, `version_number`, `static` (also as `cargo::metadata=KEY=VALUE`) | `DEP_<links>_<KEY>` for dependents' build scripts (needs `CARGO_MANIFEST_LINKS`) |
@@ -78,7 +80,7 @@ derivation with its own version, not as part of the cargo binary, or every cargo
 `rerun-if-changed-recursive`, `rerun-if-changed-env`, `lib_dir`.
 
 **Not implemented yet**, the build fails with "not implemented yet": `rustc-flags`, `cargo:metadata` (old syntax),
-`rustc-cdylib-link-arg` / `rustc-link-arg-cdylib`, `rustc-link-arg-bin`, `rustc-link-arg-bins`,
+`rustc-cdylib-link-arg` / `rustc-link-arg-cdylib`, `rustc-link-arg-bin`,
 `rustc-link-arg-tests`, `rustc-link-arg-examples`. If you hit one, please open an issue with the crate's name.
 
 Any other `cargo:KEY=VALUE` line (or `cargo::metadata=KEY=VALUE` with another key) is printed as a warning and

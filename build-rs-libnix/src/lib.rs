@@ -144,14 +144,18 @@ pub fn handle_content(input: String) -> Result<TheResult> {
             Some(rest) => (rest, true),
             None => (&line["cargo:".len()..], false),
         };
-        let re = Regex::new(r"^([^=]+)\s*=\s*(.+)$")
+        // the value may be empty, like cargo allows it: aws-lc-sys prints `cargo:system_libs=`
+        let re = Regex::new(r"^([^=]+)\s*=\s*(.*)$")
             .context("Regex error constructing cargo metadata regex")?;
 
         if let Some(caps) = re.captures(instruction) {
             let (mut command, mut arg) = (caps.get(1).unwrap().as_str(), caps.get(2).unwrap().as_str());
+            // in the old syntax every key cargo doesn't know is metadata, in the new one only `metadata=KEY=VALUE`
+            let mut is_metadata = !new_syntax;
             if new_syntax && command == "metadata" {
+                is_metadata = true;
                 match arg.split_once('=') {
-                    Some((key, value)) if !value.is_empty() => (command, arg) = (key, value),
+                    Some((key, value)) if !key.is_empty() => (command, arg) = (key, value),
                     _ => {
                         eprintln_document_with_error(input.clone(), line_number);
                         anyhow::bail!("Unable to parse metadata argument at {line_number}: '{line}'")
@@ -201,47 +205,6 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                     let directory = link_search_directory(path, std::env::var("OUT_DIR").ok().as_deref());
                     rustc_arguments.push(format!("-L \"{}={}\"", mode, directory));
                 },
-                // https://rurust.github.io/cargo-docs-ru/build-script.html#the-links-manifest-key
-                // cargo:include=/build/libsqlite3-sys-0.31.0/sqlite3
-                // DEP_{}_INCLUDE='value'
-                "include" => {
-                    let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap().envify();
-                    let key = format!("DEP_{}_INCLUDE", links);
-                    environment_variables.push(format!("{}='{}'", key, arg))
-                },
-                // https://rurust.github.io/cargo-docs-ru/build-script.html#the-links-manifest-key
-                // cargo:root=/nix/store/jndiwzj2zslh1hm7gadhj1rngv7dpgsp-libz-sys-1_1_21-script_build_run-61b385027f328c5a
-                // DEP_{}_ROOT='value'
-                "root" => {
-                    let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap().envify();
-                    let key = format!("DEP_{}_ROOT", links);
-                    environment_variables.push(format!("{}='{}'", key, arg))
-                },
-                // https://rurust.github.io/cargo-docs-ru/build-script.html#the-links-manifest-key
-                // cargo:conf=OPENSSL_NO_SSL3_METHOD
-                // DEP_{}_CONF='value'
-                "conf" => {
-                    let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap().envify();
-                    let key = format!("DEP_{}_CONF", links);
-                    environment_variables.push(format!("{}='{}'", key, arg))
-                },
-
-                // https://rurust.github.io/cargo-docs-ru/build-script.html#the-links-manifest-key
-                // cargo:version_number=30400010
-                // DEP_{}_VERSION_NUMBER='value'
-                "version_number" => {
-                    let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap().envify();
-                    let key = format!("DEP_{}_VERSION_NUMBER", links);
-                    environment_variables.push(format!("{}='{}'", key, arg))   
-                },
-                // https://rurust.github.io/cargo-docs-ru/build-script.html#the-links-manifest-key
-                // cargo:static=1
-                // DEP_{}_STATIC='1'
-                "static" => {
-                    let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap().envify();
-                    let key = format!("DEP_{}_STATIC", links);
-                    environment_variables.push(format!("{}='{}'", key, arg))
-                },
                 // https://doc.rust-lang.org/cargo/reference/build-scripts.html#rustc-link-arg-benches
                 // cargo::rustc-link-arg-benches=FLAG
                 // cargo:rustc-link-arg-benches=-rdynamic 
@@ -287,6 +250,17 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                     let version = format!("{} version {}", env!("CARGO_PKG_NAME"), env!("CARGO_PKG_VERSION"));
                     anyhow::bail!("Command: '{command}' on line: '{line_number}' not implemented yet! {version}")
                 }
+                // https://doc.rust-lang.org/cargo/reference/build-scripts.html#the-links-manifest-key
+                // metadata of a `links` package, for the build scripts of the packages depending on it:
+                // cargo:include=/build/libsqlite3-sys-0.31.0/sqlite3 -> DEP_<links>_INCLUDE='/build/libsqlite3-sys-0.31.0/sqlite3'
+                // cargo:conf=OPENSSL_NO_SSL3_METHOD                  -> DEP_<links>_CONF='OPENSSL_NO_SSL3_METHOD'
+                // cargo:system_libs=                                 -> DEP_<links>_SYSTEM_LIBS='' (aws-lc-sys)
+                _ if is_metadata && std::env::var("CARGO_MANIFEST_LINKS").is_ok() => {
+                    let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap().envify();
+                    let key = format!("DEP_{}_{}", links, command.to_string().envify());
+                    environment_variables.push(format!("{}='{}'", key, arg))
+                },
+                // metadata of a package without `links` (cargo ignores it too), or an unknown `cargo::` directive
                 _ => {
                     eprintln_document_with_warning(input.clone(), line_number);
                     continue

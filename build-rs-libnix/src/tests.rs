@@ -172,7 +172,8 @@ mod tests {
             output.rustc_propagated_arguments.join(" ").trim(),
             "-L 'native=/nix/store/yfjzkkkyxcalyj7l1n4d4y6s81i65hmy-sqlite-3.48.0/lib'"
         );
-        assert_eq!(output.environment_variables.join("\n").trim(), "");
+        // `cargo:link-target=sqlite3` is metadata like any other key cargo doesn't know
+        assert_eq!(output.environment_variables.join("\n").trim(), "DEP_MYCRATE_LINK_TARGET='sqlite3'");
         assert_eq!(
             output.rustc_link_arg_benches.join(" ").trim(),
             "-C link-arg='-rdynamic'"
@@ -200,6 +201,46 @@ mod tests {
                 check_cfgs.join(" ")
             )
         );
+    }
+
+    #[test]
+    fn test_output9() {
+        // aws-lc-sys 0.47.0: metadata with keys of its own and an empty value (`cargo:system_libs=`)
+        unsafe {
+            env::set_var("CARGO_MANIFEST_LINKS", "MYCRATE");
+        }
+        let content = fs::read_to_string("test/output9").unwrap();
+        let output = handle_content(content).unwrap();
+        let out = "/nix/store/mrkw2zlbxq94xssqb7l85lfm43jcd0kk-aws-lc-sys-0_47_0-script_build_run-6ff63a6c3919aaf8";
+        assert_eq!(
+            output.rustc_arguments.join(" ").trim(),
+            format!("-l 'static=aws_lc_0_47_0_crypto' -L \"native={out}\"")
+        );
+        let envs: Vec<&str> = output.environment_variables.iter().map(|e| e.as_str()).collect();
+        assert_eq!(envs[0], format!("DEP_MYCRATE_LIBDIR='{out}'"));
+        assert_eq!(envs[1], "DEP_MYCRATE_LINK_KIND='static'");
+        assert_eq!(envs[2], format!("DEP_MYCRATE_LIBCRYPTO_PATH='{out}/libaws_lc_0_47_0_crypto.a'"));
+        assert_eq!(envs[3], "DEP_MYCRATE_SYSTEM_LIBS=''");
+        assert_eq!(envs[4], format!("DEP_MYCRATE_INCLUDE='{out}/include'"));
+        assert_eq!(envs[5], "DEP_MYCRATE_LIBCRYPTO='aws_lc_0_47_0_crypto'");
+        assert!(envs[6].starts_with("DEP_MYCRATE_CONF='OPENSSL_NO_ASYNC,OPENSSL_NO_BF,"));
+        assert_eq!(envs.len(), 7);
+    }
+
+    #[test]
+    fn test_metadata_empty_value_and_unknown_keys() {
+        unsafe {
+            env::set_var("CARGO_MANIFEST_LINKS", "MYCRATE");
+        }
+        let content = "cargo::metadata=system_libs=\ncargo:some-key=x\ncargo::unknown-directive=y\n".to_string();
+        let output = handle_content(content).unwrap();
+        // keys are envified like cargo does: upper case, `-` -> `_`; unknown `cargo::` directives are no metadata
+        assert_eq!(
+            output.environment_variables.join("\n"),
+            "DEP_MYCRATE_SYSTEM_LIBS=''\nDEP_MYCRATE_SOME_KEY='x'"
+        );
+        let err = handle_content("cargo::metadata==value\n".to_string()).unwrap_err();
+        assert!(err.to_string().contains("Unable to parse metadata argument"));
     }
 
     #[test]

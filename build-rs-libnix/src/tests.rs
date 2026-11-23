@@ -78,6 +78,40 @@ mod tests {
     }
 
     #[test]
+    fn test_environment_variables_are_safe_to_source() {
+        unsafe {
+            env::set_var("CARGO_MANIFEST_LINKS", "MYCRATE");
+        }
+        let content = "cargo:some-key=it's $HOME `x`\n\
+            cargo:with.dot=skipped\n\
+            cargo:with space=skipped\n\
+            cargo:rustc-env=FLAGS=-DA=b -DC='d e'\n\
+            cargo:rustc-env=EMPTY=\n\
+            cargo:rustc-env=no.identifier=skipped\n\
+            cargo:last=after\n"
+            .to_string();
+        let output = handle_content(content).unwrap();
+        assert_eq!(
+            output.environment_variables,
+            [
+                r"DEP_MYCRATE_SOME_KEY='it'\''s $HOME `x`'",
+                r"FLAGS='-DA=b -DC='\''d e'\'''",
+                "EMPTY=''",
+                "DEP_MYCRATE_LAST='after'",
+            ]
+        );
+
+        // as the units load it
+        let script = output.environment_variables.join("\n")
+            + "\nprintf '%s|' \"$DEP_MYCRATE_SOME_KEY\" \"$FLAGS\" \"$EMPTY\" \"$DEP_MYCRATE_LAST\"";
+        let bash = std::process::Command::new("bash").args(["-euc", &script]).output().unwrap();
+        assert!(bash.status.success(), "{}", String::from_utf8_lossy(&bash.stderr));
+        assert_eq!(String::from_utf8_lossy(&bash.stdout), "it's $HOME `x`|-DA=b -DC='d e'||after|");
+
+        assert!(handle_content("cargo:rustc-env=NOVALUE\n".to_string()).is_err());
+    }
+
+    #[test]
     fn test_rustc_link_arg() {
         // tikv-jemalloc-sys
         let content = "cargo:rustc-link-lib=static=jemalloc_pic\ncargo:rustc-link-arg=-pthread\n".to_string();

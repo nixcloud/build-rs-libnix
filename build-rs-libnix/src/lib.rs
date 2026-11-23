@@ -117,6 +117,15 @@ fn link_search_directory(path: &str, out_dir: Option<&str>) -> String {
     }
 }
 
+/// `KEY='VALUE'` for the environment-variables file, which bash sources: a `'` in the value ends the quoting otherwise and
+/// takes the rest of the file with it. `None` for a KEY bash can't assign (`cargo:foo.bar=`), the line would be a command.
+fn environment_variable(key: &str, value: &str) -> Option<String> {
+    let valid = !key.starts_with(|c: char| c.is_ascii_digit())
+        && !key.is_empty()
+        && key.chars().all(|c| c.is_ascii_alphanumeric() || c == '_');
+    valid.then(|| format!("{}='{}'", key, value.replace('\'', r"'\''")))
+}
+
 pub fn handle_content(input: String) -> Result<TheResult> {
     let mut rustc_arguments: Vec<String> = vec![];
     let mut rustc_propagated_arguments: Vec<String> = vec![];
@@ -170,15 +179,14 @@ pub fn handle_content(input: String) -> Result<TheResult> {
 
                 // env - cargo:rustc-env=VAR=VALUE 
                 "rustc-env" => {
-                    let re = Regex::new(r"^(.+)\s*=\s*(.*)$")
-                        .context("Regex error constructing cargo metadata regex")?;
-                    if let Some(caps) = re.captures(&arg) {
-                        let key = &caps[1];
-                        let val = &caps[2];
-                        environment_variables.push(format!("{}='{}'", key, val))
-                    } else {
+                    // the key ends at the first `=`, like in cargo: the value may contain more
+                    let Some((key, val)) = arg.split_once('=') else {
                         eprintln_document_with_error(input.clone(), line_number);
                         anyhow::bail!("Unable to parse rustc-env argument at {line_number}: '{line}'")
+                    };
+                    match environment_variable(key, val) {
+                        Some(variable) => environment_variables.push(variable),
+                        None => eprintln_document_with_warning(input.clone(), line_number),
                     }
                 },
 
@@ -258,7 +266,10 @@ pub fn handle_content(input: String) -> Result<TheResult> {
                 _ if is_metadata && std::env::var("CARGO_MANIFEST_LINKS").is_ok() => {
                     let links = std::env::var("CARGO_MANIFEST_LINKS").unwrap().envify();
                     let key = format!("DEP_{}_{}", links, command.to_string().envify());
-                    environment_variables.push(format!("{}='{}'", key, arg))
+                    match environment_variable(&key, arg) {
+                        Some(variable) => environment_variables.push(variable),
+                        None => eprintln_document_with_warning(input.clone(), line_number),
+                    }
                 },
                 // metadata of a package without `links` (cargo ignores it too), or an unknown `cargo::` directive
                 _ => {

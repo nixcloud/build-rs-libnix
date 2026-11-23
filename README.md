@@ -71,7 +71,7 @@ derivation with its own version, not as part of the cargo binary, or every cargo
 | `rustc-link-arg-bins` | `-C link-arg`, for the crate's bin targets |
 | `rustc-link-arg-benches` | `-C link-arg` for benchmarks |
 | `rustc-env` | an environment variable for the crate |
-| `include`, `root`, `conf`, `version_number`, `static` (also as `cargo::metadata=KEY=VALUE`) | `DEP_<links>_<KEY>` for dependents' build scripts (needs `CARGO_MANIFEST_LINKS`) |
+| every key cargo does not know, e.g. `include`, `root`, `conf` (also as `cargo::metadata=KEY=VALUE`), of a package with `links` | `DEP_<links>_<KEY>` for dependents' build scripts (needs `CARGO_MANIFEST_LINKS`) |
 | `warning` | printed |
 | `error` | printed; the build fails once the whole output is read, like with cargo |
 
@@ -83,8 +83,8 @@ derivation with its own version, not as part of the cargo binary, or every cargo
 `rustc-cdylib-link-arg` / `rustc-link-arg-cdylib`, `rustc-link-arg-bin`,
 `rustc-link-arg-tests`, `rustc-link-arg-examples`. If you hit one, please open an issue with the crate's name.
 
-Any other `cargo:KEY=VALUE` line (or `cargo::metadata=KEY=VALUE` with another key) is printed as a warning and
-ignored.
+Any other line is printed as a warning and ignored: an unknown `cargo::` directive, metadata of a package without
+`links`, and a variable whose name bash cannot assign (`cargo:foo.bar=`).
 
 ## Usage
 
